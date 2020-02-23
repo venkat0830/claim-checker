@@ -5,7 +5,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 public class BoTable {
 	
 	@JsonProperty(value = "CLink-Call")
-	String cLinkCall;
+	String cLinkCall = "false";
 
 	public String getcLinkCall() {
 		return cLinkCall;

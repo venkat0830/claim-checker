@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponents;
@@ -19,11 +20,13 @@ import com.claim.checker.consumer.clinkGeneratedFile.Claims;
 import com.claim.checker.consumer.clinkGeneratedFile.ClaimsRequest;
 import com.claim.checker.dao.RecordDao;
 import com.claim.checker.dto.RecordDto;
+import com.claim.checker.model.BoTable;
 import com.claim.checker.model.ClaimDetails;
 import com.claim.checker.model.MemberDetails;
 import com.claim.checker.model.ProcessHpcClaimsListReq;
 import com.claim.checker.model.ProviderDetails;
 import com.claim.checker.model.Record;
+import com.claim.checker.response.BoTableResponse;
 import com.claim.checker.response.HpcErrorResponse;
 import com.claim.checker.util.Constants;
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -35,7 +38,7 @@ public class RecordServiceImpl implements RecordService {
 	@Autowired
 	private RecordDao reconRecordDao;
 
-	private String cLinkEndPoint = "https:api-stage-linkhealth.com";
+	private String cLinkEndPoint = "https://api-stage-linkhealth.com/clink-api/api/claim/summary/byicn/v1.0?tin= {tin}&icn= {icn},&payerId= {payerId}";
 
 	@Override
 	public long processHpcClaims() throws Exception {
@@ -51,7 +54,6 @@ public class RecordServiceImpl implements RecordService {
 						mapper.configure(DeserializationFeature.FAIL_ON_IGNORED_PROPERTIES, false);
 						claimString = mapper.writeValueAsString(claim);
 						RecordDto unProcessedRecord = mapper.readValue(claimString, RecordDto.class);
-						boolean isTOPSIncluded = clinkCall(unProcessedRecord);
 						RecordDto processedRecord = claimsHighwayCall(unProcessedRecord, processedRecordsCount,
 								startTime, isTOPSIncluded);
 						if (null != processedRecord) {
@@ -61,7 +63,7 @@ public class RecordServiceImpl implements RecordService {
 					} catch (Exception ex) {
 						ex.getMessage();
 					}
-					
+
 				}
 			}
 		} catch (Exception ex) {
@@ -82,11 +84,8 @@ public class RecordServiceImpl implements RecordService {
 	}
 
 	private boolean clinkCall(RecordDto unProcessedRecord) throws Exception {
-		
-		ClaimsRequest claimRequest = new ClaimsRequest();
-		claimRequest.setTin(unProcessedRecord.getProviderDetails().getProvidertin());
-		claimRequest.setIcn(unProcessedRecord.getClaimDetails().getIcn());
-		ClaimResponse claimRes = getClinkResponse(claimRequest);
+		ClaimResponse claimRes = getClinkResponse(unProcessedRecord.getProviderDetails().getProvidertin(),
+				unProcessedRecord.getClaimDetails().getIcn(), "87726");
 		boolean isClaimFoundInClink = false;
 		if (claimRes != null && claimRes.getClaims() != null) {
 			List<Claims> claims = claimRes.getClaims();
@@ -96,13 +95,14 @@ public class RecordServiceImpl implements RecordService {
 					RecordDto processed = convertClamsToRecordDto(claims2);
 					saveUnProcessedRecords(unProcessedRecord, processed);
 					isClaimFoundInClink = true;
-					
+
 				} else {
-					saveClinkErrorResponse(hpcRequest, request, response, httpStatusCode, cLinkCode, appErrorCode, startTime, platform);
+					saveClinkErrorResponse(hpcRequest, request, response, httpStatusCode, cLinkCode, appErrorCode,
+							startTime, platform);
 				}
 			}
 		}
-		
+
 		return isClaimFoundInClink;
 	}
 
@@ -124,12 +124,16 @@ public class RecordServiceImpl implements RecordService {
 		long processRecordscount = 0;
 		try {
 			ObjectMapper mapper = new ObjectMapper();
-			List<DBObject> claimsList = reconRecordDao.getHpcReceivedrecords();
+			List<RecordDto> claimsList = reconRecordDao.getHpcReceivedrecords();
 			if (null != claimsList) {
-				for (DBObject claim : claimsList) {
+				for (RecordDto claim : claimsList) {
 					String claimString = null;
 					long startTime = System.currentTimeMillis();
 					try {
+						boolean isTOPSIncluded = false;
+						if(isTrackItBoTableReq()) {
+						isTOPSIncluded = clinkCall(claim, processRecordscount);
+						}
 						RecordDto processedRecord = claimsHighwayCall(claim, processRecordscount, startTime);
 						if (null != processedRecord) {
 							Record reconRecord = new Record();
@@ -157,7 +161,8 @@ public class RecordServiceImpl implements RecordService {
 		return processRecordscount;
 	}
 
-	private RecordDto claimsHighwayCall(RecordDto reconRecordDtoReq, long startTime, boolean isTOPSInclude) throws Exception {
+	private RecordDto claimsHighwayCall(RecordDto reconRecordDtoReq, long startTime, boolean isTOPSInclude)
+			throws Exception {
 		return null;
 	}
 
@@ -174,24 +179,30 @@ public class RecordServiceImpl implements RecordService {
 		reconRecordDao.saveHpcErrorResponse(Eresponse, startTime);
 	}
 
-	private ClaimResponse getClinkResponse(ClaimsRequest request) throws Exception {
+	private ClaimResponse getClinkResponse(String tin, String icn, String payerId) throws Exception {
 		HttpHeaders headers = new HttpHeaders();
 		RestTemplate restTemplate = new RestTemplate();
 		String token = cLinkTokenGenerator.getToken();
-		Map<String, String> uriParam =  new HashMap<>();
-	
+		Map<String, String> uriParam = new HashMap<>();
 		headers.set("Authorization", "Bearer " + token);
-		uriParam.put("tin", request.getTin());
-		uriParam.put("icn", request.getIcn());
-		uriParam.put("payerId", request.getPayerId());
-		UriComponents builder = UriComponentsBuilder.fromHttpUrl(cLinkEndPoint)
-				.queryParam("tin", request.getTin())
-				.queryParam("icn", request.getIcn())
-				.queryParam("payerId", request.getPayerId()).build();
-		HttpEntity<Object> httpEntity = new HttpEntity<>(request, headers);
+		uriParam.put("tin", tin);
+		uriParam.put("icn", icn);
+		uriParam.put("payerId", payerId);
+		HttpEntity<Object> httpEntity = new HttpEntity<>(headers);
 		ResponseEntity<ClaimResponse> claimRespone = restTemplate.exchange(cLinkEndPoint, HttpMethod.GET, httpEntity,
 				ClaimResponse.class, uriParam);
 		return claimRespone.getBody();
+	}
+
+	private boolean isTrackItBoTableReq() throws Exception {
+		RestTemplate restTemplate = new RestTemplate();
+		BoTable boTable = restTemplate.getForObject("www.boTableUrl.com", BoTable.class);
+		if (null != boTable && boTable.getcLinkCall() != null) {
+			if (boTable.getcLinkCall().equals("true")) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 }
