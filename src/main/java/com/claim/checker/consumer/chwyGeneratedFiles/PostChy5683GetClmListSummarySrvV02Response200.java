@@ -1,0 +1,17 @@
+package com.claim.checker.consumer.chwyGeneratedFiles;
+
+public class PostChy5683GetClmListSummarySrvV02Response200 {
+
+	protected Chy5683GetClmListSummarySrvV02OperationResponse chy5683GetClmListSummarySrvV02OperationResponse;
+
+	public Chy5683GetClmListSummarySrvV02OperationResponse getChy5683GetClmListSummarySrvV02OperationResponse() {
+		return chy5683GetClmListSummarySrvV02OperationResponse;
+	}
+
+	public void setChy5683GetClmListSummarySrvV02OperationResponse(
+			Chy5683GetClmListSummarySrvV02OperationResponse chy5683GetClmListSummarySrvV02OperationResponse) {
+		this.chy5683GetClmListSummarySrvV02OperationResponse = chy5683GetClmListSummarySrvV02OperationResponse;
+	}
+	
+	
+}
