@@ -8,6 +8,7 @@ public class MemberInfo {
 	private String ptnDob;
 	private String partitionId;
 	private String cliamServiceId;
+	private String subscriberId;
 	public String getPolicyNbr() {
 		return policyNbr;
 	}
@@ -43,6 +44,12 @@ public class MemberInfo {
 	}
 	public void setCliamServiceId(String cliamServiceId) {
 		this.cliamServiceId = cliamServiceId;
+	}
+	public String getSubscriberId() {
+		return subscriberId;
+	}
+	public void setSubscriberId(String subscriberId) {
+		this.subscriberId = subscriberId;
 	}
 	
 	
